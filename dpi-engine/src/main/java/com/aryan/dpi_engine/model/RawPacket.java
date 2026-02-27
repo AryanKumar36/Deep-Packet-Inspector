@@ -12,8 +12,16 @@ public class RawPacket {
         this.timestampUsec = usec;
     }
 
-    public byte[] getData() { return data; }
-    public long getTimestampSec() { return timestampSec; }
-    public long getTimestampUsec() { return timestampUsec; }
+    public byte[] getData() {
+        return data;
+    }
+
+    public long getTimestampSec() {
+        return timestampSec;
+    }
+
+    public long getTimestampUsec() {
+        return timestampUsec;
+    }
 
 }
