@@ -5,52 +5,60 @@ import com.aryan.dpi_engine.util.ByteReader;
 import java.util.Optional;
 
 public class DnsQueryExtractor {
-    public static boolean isDnsQuery(byte[] payload)    {
 
-        //DNS Header Length is always 12
-        if(payload.length< 12) return false;
+    /**
+     * Extract queried domain from DNS request
+     */
+    public static String extractQuery(byte[] payload, int offset, int length) {
+        if (!isDNSQuery(payload, offset, length)) {
+            return null;
+        }
 
-        //Check for query vs response
-        // 0 = query
-        // 1 = response
-        if ((payload[2]& 0x80)!= 0) return false;
+        // DNS query starts at byte 12
+        int pos = offset + 12;
+        StringBuilder domain = new StringBuilder();
 
-        //Qdcount is number of question
-        //Standard DNS query carries max 1 question
-        int qdcount = ByteReader.readUnit16BE(payload, 4);
-        return qdcount>0;
+        while (pos < offset + length) {
+            int labelLength = payload[pos] & 0xFF;
+
+            if (labelLength == 0) {
+                // End of domain name
+                break;
+            }
+
+            if (labelLength > 63) {
+                // Compression pointer or invalid
+                break;
+            }
+
+            pos++;
+            if (pos + labelLength > offset + length) break;
+
+            if (domain.length() > 0) {
+                domain.append('.');
+            }
+            domain.append(new String(payload, pos, labelLength));
+            pos += labelLength;
+        }
+
+        return domain.length() == 0 ? null : domain.toString();
     }
 
-    public static Optional<String> extract(byte[] payload)
-    {
-        if(!isDnsQuery(payload)) return Optional.empty();
+    /**
+     * Check if this is a DNS query (not response)
+     */
+    public static boolean isDNSQuery(byte[] payload, int offset, int length) {
+        // Minimum DNS header is 12 bytes
+        if (length < 12) return false;
 
-        //Skipping DNS header
-        int offset = 12;
+        // Check QR bit (byte 2, bit 7) - should be 0 for query
+        int flags = payload[offset + 2] & 0xFF;
+        if ((flags & 0x80) != 0) return false; // This is a response, not a query
 
-        // Initialising Mutable String
-        StringBuilder domain;
-        domain = new StringBuilder();
+        // Check QDCOUNT (bytes 4-5) - should be > 0
+        int qdcount = ((payload[offset + 4] & 0xFF) << 8) | (payload[offset + 5] & 0xFF);
+        if (qdcount == 0) return false;
 
-        while (offset < payload.length)
-        {
-            int len = payload[offset] & 0xFF;
-
-            //End of domain
-            if(len == 0) break;
-
-            //DNS label max length = 63 bytes
-            if(len> 63 || offset + len >= payload.length) break;
-            offset++;
-
-            //Add '.' after each append
-            if(!domain.isEmpty()) domain.append('.');
-
-            //appending the domain
-            domain.append(new String(payload, offset, len));
-            offset+=len;
-
-        }
-        return domain.isEmpty() ? Optional.empty() : Optional.of(domain.toString());
+        return true;
     }
 }
